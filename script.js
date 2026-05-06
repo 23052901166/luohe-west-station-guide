@@ -17,7 +17,7 @@ let systemConfig = {
 
 let importedData = [];
 
-// ===================== 核心功能 =====================
+// ===================== 核心交互功能 =====================
 // 更新时间显示
 function updateDatetime() {
     const now = new Date();
@@ -27,7 +27,7 @@ function updateDatetime() {
     document.getElementById("previewDatetime").innerText = datetimeStr;
 }
 
-// 渲染车次表格
+// 渲染车次表格（可直接点击编辑）
 function renderTrainTable() {
     const tbody = document.getElementById("trainTbody");
     tbody.innerHTML = "";
@@ -57,11 +57,11 @@ function renderTrainTable() {
         tbody.appendChild(tr);
     });
 
-    // 同时更新大屏预览
+    // 同步更新大屏预览
     renderPreviewScreen();
 }
 
-// 更新车次信息
+// 更新车次信息（表格编辑触发）
 function updateTrain(id, field, value) {
     const train = systemConfig.trains.find(t => t.id === id);
     if (train) {
@@ -70,64 +70,85 @@ function updateTrain(id, field, value) {
     }
 }
 
-// 晚点命令
-function setDelay() {
-    const selectedTrain = prompt("请输入需要设置晚点的车次号：");
-    const delayMinutes = prompt("请输入晚点分钟数：");
-    if (selectedTrain && delayMinutes) {
-        const train = systemConfig.trains.find(t => t.no === selectedTrain);
-        if (train) {
-            train.status = "晚点";
-            train.delay = parseInt(delayMinutes);
-            // 计算预计时间
-            if (train.arriveTime) {
-                const [h, m] = train.arriveTime.split(":").map(Number);
-                const newDate = new Date();
-                newDate.setHours(h, m + parseInt(delayMinutes));
-                train.expectedArrive = `${String(newDate.getHours()).padStart(2,'0')}:${String(newDate.getMinutes()).padStart(2,'0')}`;
-            }
-            if (train.departTime) {
-                const [h, m] = train.departTime.split(":").map(Number);
-                const newDate = new Date();
-                newDate.setHours(h, m + parseInt(delayMinutes));
-                train.expectedDepart = `${String(newDate.getHours()).padStart(2,'0')}:${String(newDate.getMinutes()).padStart(2,'0')}`;
-            }
-            renderTrainTable();
-            alert(`已将车次${selectedTrain}设置为晚点${delayMinutes}分钟`);
-        } else {
-            alert("未找到该车次");
-        }
-    }
+// 晚点命令弹窗
+function showCommandModal(type) {
+    document.getElementById("commandModal").style.display = "flex";
+    document.getElementById("commandTitle").innerText = type === "delay" ? "晚点命令" : "停运命令";
+    document.getElementById("delayInputContainer").style.display = type === "delay" ? "block" : "none";
+    document.getElementById("trainNoInput").value = "";
+    document.getElementById("delayMinutesInput").value = "";
 }
 
-// 停运命令
-function setStop() {
-    const selectedTrain = prompt("请输入需要设置停运的车次号：");
-    if (selectedTrain) {
-        const train = systemConfig.trains.find(t => t.no === selectedTrain);
-        if (train) {
-            train.status = "停运";
-            renderTrainTable();
-            alert(`已将车次${selectedTrain}设置为停运`);
-        } else {
-            alert("未找到该车次");
-        }
+// 确认晚点/停运命令
+function confirmCommand() {
+    const trainNo = document.getElementById("trainNoInput").value;
+    const delayMinutes = document.getElementById("delayMinutesInput").value;
+    const type = document.getElementById("commandTitle").innerText;
+
+    const train = systemConfig.trains.find(t => t.no === trainNo);
+    if (!train) {
+        alert("未找到该车次");
+        return;
     }
+
+    if (type === "晚点命令") {
+        train.status = "晚点";
+        train.delay = parseInt(delayMinutes);
+        // 自动计算预计时间
+        if (train.arriveTime) {
+            const [h, m] = train.arriveTime.split(":").map(Number);
+            const newDate = new Date();
+            newDate.setHours(h, m + parseInt(delayMinutes));
+            train.expectedArrive = `${String(newDate.getHours()).padStart(2,'0')}:${String(newDate.getMinutes()).padStart(2,'0')}`;
+        }
+        if (train.departTime) {
+            const [h, m] = train.departTime.split(":").map(Number);
+            const newDate = new Date();
+            newDate.setHours(h, m + parseInt(delayMinutes));
+            train.expectedDepart = `${String(newDate.getHours()).padStart(2,'0')}:${String(newDate.getMinutes()).padStart(2,'0')}`;
+        }
+        alert(`已将车次${trainNo}设置为晚点${delayMinutes}分钟`);
+    } else {
+        train.status = "停运";
+        alert(`已将车次${trainNo}设置为停运`);
+    }
+
+    closeModal();
+    renderTrainTable();
 }
 
-// 查找车次
-function findTrain() {
-    const keyword = prompt("请输入车次号、发站或到站：");
-    if (keyword) {
-        const filtered = systemConfig.trains.filter(t => 
-            t.no.includes(keyword) || t.start.includes(keyword) || t.end.includes(keyword)
-        );
-        if (filtered.length > 0) {
-            alert(`找到${filtered.length}条相关车次`);
-        } else {
-            alert("未找到相关车次");
-        }
+// 查找车次弹窗
+function showSearchModal() {
+    document.getElementById("searchModal").style.display = "flex";
+    document.getElementById("searchKeywordInput").value = "";
+}
+
+// 确认查找
+function confirmSearch() {
+    const keyword = document.getElementById("searchKeywordInput").value;
+    if (!keyword) return;
+
+    const filtered = systemConfig.trains.filter(t => 
+        t.no.includes(keyword) || t.start.includes(keyword) || t.end.includes(keyword)
+    );
+
+    if (filtered.length > 0) {
+        alert(`找到${filtered.length}条相关车次，已在表格中高亮显示`);
+        // 高亮匹配行
+        const rows = document.querySelectorAll("#trainTbody tr");
+        rows.forEach((row, index) => {
+            const train = systemConfig.trains[index];
+            if (train.no.includes(keyword) || train.start.includes(keyword) || train.end.includes(keyword)) {
+                row.style.backgroundColor = "#fff3cd";
+            } else {
+                row.style.backgroundColor = "";
+            }
+        });
+    } else {
+        alert("未找到相关车次");
     }
+
+    closeModal();
 }
 
 // 刷新屏显
@@ -136,39 +157,33 @@ function refreshScreen() {
     alert("屏显已刷新");
 }
 
-// 站名配置
-function configStation() {
-    document.getElementById("configTitle").innerText = "站名配置";
-    document.getElementById("configForm").innerHTML = `
-        <label>车站名称：</label>
-        <input type="text" id="stationNameInput" value="${systemConfig.stationName}">
-    `;
+// 站名配置弹窗
+function showConfigModal(type) {
     document.getElementById("configModal").style.display = "flex";
-}
+    const titleMap = { station: "站名配置", train: "车次配置", time: "时间配置" };
+    document.getElementById("configTitle").innerText = titleMap[type];
 
-// 车次配置
-function configTrain() {
-    document.getElementById("configTitle").innerText = "车次配置";
-    document.getElementById("configForm").innerHTML = `
-        <p>车次配置说明：</p>
-        <ul>
-            <li>可直接在表格中修改车次信息</li>
-            <li>支持导入/导出Excel车次</li>
-            <li>晚点车次会自动计算预计时间</li>
-        </ul>
-    `;
-    document.getElementById("configModal").style.display = "flex";
-}
-
-// 时间配置
-function configTime() {
-    document.getElementById("configTitle").innerText = "时间配置";
-    document.getElementById("configForm").innerHTML = `
-        <label>时间偏移（分钟）：</label>
-        <input type="number" id="timeOffsetInput" value="${systemConfig.timeOffset}">
-        <p>正数为调快，负数为调慢</p>
-    `;
-    document.getElementById("configModal").style.display = "flex";
+    if (type === "station") {
+        document.getElementById("configForm").innerHTML = `
+            <label>车站名称：</label>
+            <input type="text" id="stationNameInput" value="${systemConfig.stationName}">
+        `;
+    } else if (type === "time") {
+        document.getElementById("configForm").innerHTML = `
+            <label>时间偏移（分钟）：</label>
+            <input type="number" id="timeOffsetInput" value="${systemConfig.timeOffset}">
+            <p>正数为调快，负数为调慢</p>
+        `;
+    } else {
+        document.getElementById("configForm").innerHTML = `
+            <p>车次配置说明：</p>
+            <ul>
+                <li>可直接在表格中修改车次信息</li>
+                <li>支持导入/导出Excel车次</li>
+                <li>晚点车次会自动计算预计时间</li>
+            </ul>
+        `;
+    }
 }
 
 // 保存配置
@@ -340,19 +355,21 @@ function exportToExcel() {
 }
 
 // 大屏预览
-function openAdminPanel() {
-    document.getElementById("screenModal").style.display = "flex";
+function openPreviewScreen() {
+    document.getElementById("previewModal").style.display = "flex";
     renderPreviewScreen();
 }
 
-function closeScreenModal() {
-    document.getElementById("screenModal").style.display = "none";
+function closePreviewModal() {
+    document.getElementById("previewModal").style.display = "none";
 }
 
 // 关闭弹窗
 function closeModal() {
-    document.getElementById("importModal").style.display = "none";
+    document.getElementById("commandModal").style.display = "none";
+    document.getElementById("searchModal").style.display = "none";
     document.getElementById("configModal").style.display = "none";
+    document.getElementById("importModal").style.display = "none";
 }
 
 // 初始化
